@@ -23,10 +23,3 @@ main = do
 
   clients <- connectIfRequested hash args
   listen clients hash $ read port
-
-connectIfRequested :: Hash -> [String] -> IO [Client]
-connectIfRequested hash args@(host:xs) = do
-  handle <- connect args
-  cHash <- firstPing hash handle
-  return [Client 1 handle cHash]
-connectIfRequested hash [] = return []

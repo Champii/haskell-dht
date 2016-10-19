@@ -15,7 +15,7 @@ module Dht.Data
 
   data Message = Message Hash Command deriving (Show, Read)
 
-  data Client = Client Int Handle Hash
+  data Client = Client Int Handle Hash deriving (Show)
 
   instance Serialize Command where
     put c = case c of

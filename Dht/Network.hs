@@ -1,8 +1,6 @@
 module Dht.Network
-( connect
-, listen
-, firstPing
-, readLoop
+( listen
+, connectIfRequested
 ) where
 
   import Network
@@ -14,6 +12,14 @@ module Dht.Network
 
   import Dht.Data
   import Dht.Commands
+
+  connectIfRequested :: Hash -> [String] -> IO [Client]
+  connectIfRequested hash [] = return []
+  connectIfRequested hash args@(host:xs) = do
+    handle <- connect args
+    cHash <- firstPing hash handle
+    forkRead handle hash
+    return [Client 1 handle cHash]
 
   connect :: [String] -> IO Handle
   connect (host:port:_) = _connect host (PortNumber $ fromIntegral (read port :: Int))
@@ -39,12 +45,18 @@ module Dht.Network
     cHash <- firstPing hash handle
 
     let clients2 = addClient clients handle cHash
-    let _ = forkRead handle cHash
+    forkRead handle cHash
+
+    -- putStrLn $ "Client nb" ++ show (head clients2) ++ (show $ length clients)
 
     handleConnections sock clients2 hash
 
+  getNextId :: [Client] -> Int
+  getNextId [] = 0
+  getNextId clients = maximum [id | (Client id _ _) <- clients]
+
   addClient :: [Client] -> Handle -> Hash -> [Client]
-  addClient clients handle hash = Client (length clients) handle hash : clients
+  addClient clients handle hash = (Client (getNextId clients + 1) handle hash) : clients
 
   firstPing :: Hash -> Handle -> IO Hash
   firstPing hash handle = do
