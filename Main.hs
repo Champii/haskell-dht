@@ -20,11 +20,13 @@ main = do
   hash <- generateHash
 
   (port:args) <- getArgs
-  isConnected <- connect args
 
-  case isConnected of
-    Nothing       -> listen [] hash $ read port
-    (Just handle) -> do
-      maybHash <- firstPing handle hash
-      let client = Client 1 handle $ fromJust maybHash
-        in listen [client] hash $ read port
+  clients <- connectIfRequested hash args
+  listen clients hash $ read port
+
+connectIfRequested :: Hash -> [String] -> IO [Client]
+connectIfRequested hash args@(host:xs) = do
+  handle <- connect args
+  cHash <- firstPing hash handle
+  return [Client 1 handle cHash]
+connectIfRequested hash [] = return []

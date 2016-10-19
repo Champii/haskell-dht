@@ -9,13 +9,13 @@ module Dht.Commands
 
   import Dht.Data
 
-  ping :: Handle -> Hash -> IO ()
-  ping handle hash = do
+  ping :: Hash -> Handle -> IO ()
+  ping hash handle = do
     putStrLn "> Ping"
     send (Message hash Ping) handle
 
-  pong :: Handle -> Hash -> IO ()
-  pong handle hash = do
+  pong :: Hash -> Handle -> IO ()
+  pong hash handle = do
     putStrLn "> Pong"
     send (Message hash Pong) handle
 

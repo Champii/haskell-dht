@@ -15,18 +15,16 @@ module Dht.Network
   import Dht.Data
   import Dht.Commands
 
-  connect :: [String] -> IO (Maybe Handle)
-  connect []            = return Nothing
+  connect :: [String] -> IO Handle
   connect (host:port:_) = _connect host (PortNumber $ fromIntegral (read port :: Int))
   connect [host]        = _connect host (PortNumber 3000)
 
-  _connect :: String -> PortID -> IO (Maybe Handle)
+  _connect :: String -> PortID -> IO Handle
   _connect host port@(PortNumber iPort) = withSocketsDo $ do
     putStrLn $ "Connecting to bootstrap node: " ++ host ++ ":" ++ show iPort
     handle <- connectTo host port
     putStrLn "Connected"
-    return (Just handle)
-  _connect _ _ = return Nothing
+    return handle
 
   listen :: [Client] -> Hash -> Int -> IO ()
   listen clients hash port = withSocketsDo $ do
@@ -38,30 +36,30 @@ module Dht.Network
   handleConnections sock clients hash = do
     (handle, host, port) <- accept sock
     putStrLn $ "New client: " ++ host ++ show port
-    maybHash <- firstPing handle hash
+    cHash <- firstPing hash handle
 
-    let clients2 = maybe clients (addClient clients handle) maybHash
-    let _ = fmap (forkRead handle) maybHash
+    let clients2 = addClient clients handle cHash
+    let _ = forkRead handle cHash
 
     handleConnections sock clients2 hash
 
   addClient :: [Client] -> Handle -> Hash -> [Client]
   addClient clients handle hash = Client (length clients) handle hash : clients
 
-  firstPing :: Handle -> Hash -> IO (Maybe Hash)
-  firstPing handle hash = do
-    ping handle hash
-    mayb <- readOnce handle hash
-    return $ fmap (\(Message clientHash _) -> clientHash) mayb
+  firstPing :: Hash -> Handle -> IO Hash
+  firstPing hash handle = do
+    ping hash handle
+    Message cHash _ <- readOnceDispatch handle hash
+    return cHash
 
   forkRead :: Handle -> Hash -> IO ()
   forkRead handle hash = do
-    _ <- forkIO $ readLoop handle hash
+    forkIO $ readLoop handle hash
     return ()
 
   readLoop :: Handle -> Hash -> IO ()
   readLoop handle hash = do
-    _ <- readOnce handle hash
+    readOnceDispatch handle hash
     readLoop handle hash
 
   readOnce :: Handle -> Hash -> IO (Maybe Message)
@@ -72,15 +70,22 @@ module Dht.Network
       (Left err)    -> do
         putStrLn err
         return Nothing
-      (Right msg) -> dispatch handle hash msg
+      (Right msg) -> return $ Just msg
 
-  dispatch :: Handle -> Hash -> Message -> IO (Maybe Message)
-  dispatch handle hash msg@(Message _ cmd) = do
+  dispatch :: Handle -> Hash -> Maybe Message -> IO (Maybe Message)
+  dispatch handle hash Nothing = return Nothing
+  dispatch handle hash maybMsg@(Just msg@(Message _ cmd)) = do
     case cmd of
       Ping    -> do
         putStrLn "< Ping"
-        pong handle hash
+        pong hash handle
       Pong    -> putStrLn "< Pong"
       Unknown -> putStrLn "Unknown !"
 
-    return (Just msg)
+    return maybMsg
+
+  readOnceDispatch :: Handle -> Hash -> IO Message
+  readOnceDispatch handle hash =
+    readOnce handle hash >>=
+    dispatch handle hash >>=
+    \(Just msg) -> return msg
